@@ -1,0 +1,31 @@
+import express from "express";
+import cors from "cors";
+import datasetRoutes from "./routes/datasetRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import insightsRoutes from "./routes/insightsRoutes.js";
+
+export function createApp() {
+  const app = express();
+
+  app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
+  app.use(express.json());
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", service: "chatbot-server" });
+  });
+
+  app.use("/api/datasets", datasetRoutes);
+  app.use("/api/chat", chatRoutes);
+  app.use("/api/insights", insightsRoutes);
+
+  app.use((req, res) => {
+    res.status(404).json({ error: "Route not found" });
+  });
+
+  app.use((err, req, res, next) => {
+    console.error("[error]", err.message);
+    res.status(err.status || 500).json({ error: err.message || "Internal server error" });
+  });
+
+  return app;
+}
