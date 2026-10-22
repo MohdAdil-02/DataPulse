@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { uploadDataset } from "../services/api";
 
-export default function DatasetUpload({ onUploaded }) {
+export default function DatasetUpload({ onUploaded, recent = [], onOpen }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
+  const [drag, setDrag] = useState(false);
 
   async function handleUpload() {
     if (!file) return;
@@ -15,49 +15,52 @@ export default function DatasetUpload({ onUploaded }) {
       const data = await uploadDataset(file);
       onUploaded(data.dataset);
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      setError(err.response?.data?.error || (err.code === "ERR_NETWORK" ? "Can't reach the server. Start it with npm run dev in the server folder." : err.message));
     } finally {
       setLoading(false);
     }
   }
 
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragActive(false);
-    if (e.dataTransfer.files?.[0]) setFile(e.dataTransfer.files[0]);
-  }
-
   return (
     <div className="upload-box">
-      <div className="upload-eyebrow">Data exploration chatbot</div>
-      <h2>Bring your data. Ask it anything.</h2>
-      <p>Upload a CSV or Excel file and get plain-English answers, charts, and insights — no queries to write.</p>
+      <div className="brand big"><span className="brand-mark" />DataPulse</div>
+      <h1>Bring your data. Ask it anything.</h1>
+      <p className="lede">Upload a CSV or Excel file and get answers, charts and forecasts in plain English. No queries to write.</p>
 
       <div
-        className={`dropzone ${dragActive ? "drag-active" : ""}`}
-        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={handleDrop}
+        className={`dropzone ${drag ? "drag" : ""} ${file ? "has-file" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); }}
       >
-        <div className="dropzone-icon">⌘</div>
-        <p>Drag a file here</p>
-        <label className="file-picker-label">
-          or choose a file
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
+        <div className="dz-icon">⬆</div>
+        {file ? (
+          <p className="dz-file">{file.name} <span>({(file.size / 1024).toFixed(1)} KB)</span></p>
+        ) : (
+          <p>Drop a .csv or .xlsx file here</p>
+        )}
+        <label className="link">
+          {file ? "Choose a different file" : "or browse your computer"}
+          <input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => setFile(e.target.files[0])} />
         </label>
-
-        {file && <div className="selected-file">{file.name}</div>}
       </div>
 
-      <button className="primary" onClick={handleUpload} disabled={!file || loading}>
-        {loading ? "Uploading…" : "Upload dataset"}
+      <button className="btn-primary wide" onClick={handleUpload} disabled={!file || loading}>
+        {loading ? "Analysing your file…" : "Upload and start chatting"}
       </button>
-
       {error && <div className="error-banner">{error}</div>}
+
+      {recent.length > 0 && (
+        <div className="recent">
+          <span className="label">Continue with a previous dataset</span>
+          {recent.slice(0, 4).map((d) => (
+            <button key={d.id} className="recent-item" onClick={() => onOpen(d)}>
+              <span>{d.originalFileName}</span>
+              <em>{d.rowCount?.toLocaleString()} rows</em>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

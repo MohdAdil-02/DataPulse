@@ -1,9 +1,12 @@
 import dns from "dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
-
 import "dotenv/config";
 import { createApp } from "./app.js";
 import { connectDB } from "./config/db.js";
+
+// Only needed on networks whose DNS blocks MongoDB SRV lookups (set DNS_SERVERS locally).
+if (process.env.DNS_SERVERS) {
+  dns.setServers(process.env.DNS_SERVERS.split(",").map((s) => s.trim()));
+}
 
 const PORT = process.env.PORT || 5000;
 

@@ -1,5 +1,8 @@
 import multer from "multer";
 import path from "path";
+import fs from "fs";
+
+fs.mkdirSync("uploads", { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -23,5 +26,5 @@ function fileFilter(req, file, cb) {
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  limits: { fileSize: 20 * 1024 * 1024 },
 });

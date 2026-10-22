@@ -1,159 +1,103 @@
-import { useState, useEffect } from "react";
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot
-} from "recharts";
+import { useState, useEffect, useMemo } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { getInsightColumns, getOutliers, getForecast } from "../services/api";
+import { fmt } from "../utils";
+import { PALETTE } from "./ResultChart";
 
 export default function InsightsPanel({ dataset }) {
-  const [columns, setColumns] = useState({ numericColumns: [], dateColumns: [] });
-  const [selectedColumn, setSelectedColumn] = useState("");
-  const [selectedDateColumn, setSelectedDateColumn] = useState("");
-  const [outlierResult, setOutlierResult] = useState(null);
-  const [forecastResult, setForecastResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [cols, setCols] = useState({ numericColumns: [], dateColumns: [] });
+  const [num, setNum] = useState("");
+  const [date, setDate] = useState("");
+  const [threshold, setThreshold] = useState(2.5);
+  const [outliers, setOutliers] = useState(null);
+  const [forecast, setForecast] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!dataset) return;
-    getInsightColumns(dataset.id).then((data) => {
-      setColumns(data);
-      setSelectedColumn(data.numericColumns[0] || "");
-      setSelectedDateColumn(data.dateColumns[0] || "");
-    });
-  }, [dataset]);
+    getInsightColumns(dataset.id).then((d) => { setCols(d); setNum(d.numericColumns[0] || ""); setDate(d.dateColumns[0] || ""); }).catch(() => {});
+    setOutliers(null); setForecast(null);
+  }, [dataset.id]);
 
-  async function runOutlierDetection() {
-    if (!selectedColumn) return;
-    setLoading(true);
-    setError(null);
-    setOutlierResult(null);
+  async function run(kind) {
+    setBusy(true); setError(null);
     try {
-      const data = await getOutliers(dataset.id, selectedColumn);
-      setOutlierResult(data);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    } finally {
-      setLoading(false);
-    }
+      if (kind === "out") { setOutliers(await getOutliers(dataset.id, num, threshold)); }
+      else { setForecast(await getForecast(dataset.id, date, num, 7)); }
+    } catch (e) { setError(e.response?.data?.error || e.message); }
+    finally { setBusy(false); }
   }
 
-  async function runForecast() {
-    if (!selectedColumn || !selectedDateColumn) return;
-    setLoading(true);
-    setError(null);
-    setForecastResult(null);
-    try {
-      const data = await getForecast(dataset.id, selectedDateColumn, selectedColumn, 5);
-      setForecastResult(data);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const series = useMemo(() => {
+    if (!forecast) return [];
+    const lastActual = forecast.series.map((p) => p.type).lastIndexOf("actual");
+    return forecast.series.map((p, i) => ({
+      date: p.date,
+      Actual: p.type === "actual" ? p.value : null,
+      Forecast: p.type === "forecast" || i === lastActual ? p.value : null,
+    }));
+  }, [forecast]);
 
-  if (!dataset) return null;
-  if (columns.numericColumns.length === 0) {
-    return <p className="insights-empty">No numeric columns available for insights.</p>;
-  }
+  if (cols.numericColumns.length === 0) return <div className="page"><p className="muted">This dataset has no numeric columns, so there is nothing to analyse yet.</p></div>;
 
   return (
-    <div className="insights-panel">
-      <span className="sidebar-label">ML INSIGHTS</span>
-
-      <div className="insights-controls">
-        <label>
-          Numeric column:
-          <select value={selectedColumn} onChange={(e) => setSelectedColumn(e.target.value)}>
-            {columns.numericColumns.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+    <div className="page">
+      <div className="insight-controls">
+        <label>Measure
+          <select value={num} onChange={(e) => setNum(e.target.value)}>{cols.numericColumns.map((c) => <option key={c}>{c}</option>)}</select>
         </label>
-
-        {columns.dateColumns.length > 0 && (
-          <label>
-            Date column:
-            <select value={selectedDateColumn} onChange={(e) => setSelectedDateColumn(e.target.value)}>
-              {columns.dateColumns.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+        {cols.dateColumns.length > 0 && (
+          <label>Date
+            <select value={date} onChange={(e) => setDate(e.target.value)}>{cols.dateColumns.map((c) => <option key={c}>{c}</option>)}</select>
           </label>
         )}
-
-        <button onClick={runOutlierDetection} disabled={loading}>Detect Outliers</button>
-        {columns.dateColumns.length > 0 && (
-          <button onClick={runForecast} disabled={loading}>Forecast Trend</button>
-        )}
+        <label>Outlier sensitivity <b>{threshold}σ</b>
+          <input type="range" min="1.5" max="4" step="0.5" value={threshold} onChange={(e) => setThreshold(+e.target.value)} />
+        </label>
+        <button className="btn-primary" disabled={busy} onClick={() => run("out")}>Find outliers</button>
+        {cols.dateColumns.length > 0 && <button className="btn-ghost" disabled={busy} onClick={() => run("fc")}>Forecast next 7 periods</button>}
       </div>
+      {error && <div className="error-banner">{error}</div>}
 
-      {error && <p className="error">{error}</p>}
-
-      {outlierResult && (
-        <div className="insight-result">
-          <p>
-            Mean: {outlierResult.mean.toFixed(2)}, Std Dev: {outlierResult.stdDev.toFixed(2)} —{" "}
-            <strong>{outlierResult.outlierCount} outlier(s)</strong> found in "{outlierResult.column}".
-          </p>
-          {outlierResult.outliers.length > 0 && (
-            <table>
-              <thead>
-                <tr>
-                  {Object.keys(outlierResult.outliers[0]).filter(k => k !== '_id').map((k) => (
-                    <th key={k}>{k}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {outlierResult.outliers.slice(0, 10).map((row, i) => (
-                  <tr key={i}>
-                    {Object.entries(row).filter(([k]) => k !== '_id').map(([k, v]) => (
-                      <td key={k}>{String(v)}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+      {outliers && (
+        <section>
+          <div className="kpis">
+            <div className="kpi"><span>Mean</span><b>{fmt(outliers.mean)}</b></div>
+            <div className="kpi"><span>Std deviation</span><b>{fmt(outliers.stdDev)}</b></div>
+            <div className={`kpi ${outliers.outlierCount ? "warn" : "good"}`}><span>Outliers</span><b>{outliers.outlierCount}</b></div>
+          </div>
+          {outliers.outliers.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead><tr>{Object.keys(outliers.outliers[0]).filter((k) => k !== "_id").map((k) => <th key={k}>{k}</th>)}</tr></thead>
+                <tbody>{outliers.outliers.slice(0, 15).map((r, i) => <tr key={i}>{Object.entries(r).filter(([k]) => k !== "_id").map(([k, v]) => <td key={k}>{k === date || String(v).includes("T00:") ? String(v).slice(0, 10) : fmt(v)}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          ) : <p className="muted">No values in "{outliers.column}" sit beyond {threshold} standard deviations.</p>}
+        </section>
       )}
 
-      {forecastResult && (
-        <div className="insight-result">
-          <p>
-            Trend slope: {forecastResult.slope.toFixed(3)} per period ({forecastResult.slope > 0 ? "increasing" : "decreasing"})
-          </p>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={forecastResult.series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#4f46e5"
-                strokeWidth={2}
-                dot={(props) => {
-                  const isForecast = forecastResult.series[props.index]?.type === "forecast";
-                  return (
-                    <circle
-                      key={props.index}
-                      cx={props.cx}
-                      cy={props.cy}
-                      r={3}
-                      fill={isForecast ? "#f59e0b" : "#4f46e5"}
-                    />
-                  );
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <p className="chart-note">🟠 Orange points are forecasted (projected) values.</p>
-        </div>
+      {forecast && (
+        <section>
+          <div className="kpis">
+            <div className={`kpi ${forecast.slope >= 0 ? "good" : "warn"}`}><span>Trend per period</span><b>{forecast.slope >= 0 ? "+" : ""}{fmt(+forecast.slope.toFixed(2))}</b></div>
+            <div className="kpi"><span>Direction</span><b>{forecast.slope >= 0 ? "Increasing" : "Decreasing"}</b></div>
+          </div>
+          <div className="chart-card">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} minTickGap={30} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line dataKey="Actual" stroke={PALETTE[0]} strokeWidth={2.5} dot={false} connectNulls={false} />
+                <Line dataKey="Forecast" stroke={PALETTE[3]} strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 3 }} connectNulls={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="muted">Linear-trend projection. Treat it as a direction indicator, not a precise prediction.</p>
+        </section>
       )}
     </div>
   );

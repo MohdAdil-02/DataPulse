@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Dataset } from "../models/Dataset.js";
 import { ChatMessage } from "../models/ChatMessage.js";
-import { ChatService, schemaToPromptText } from "../services/chatService.js";
+import { ChatService, schemaToPromptText, buildHistory, getAiConfig } from "../services/chatService.js";
 
 export async function askQuestion(req, res) {
   const { datasetId, question } = req.body;
@@ -10,9 +10,14 @@ export async function askQuestion(req, res) {
     return res.status(400).json({ error: "datasetId and question are required." });
   }
 
-  const apiKey = req.headers["x-gemini-api-key"] || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(400).json({ error: "Gemini API key is missing." });
+  let ai;
+  try {
+    ai = getAiConfig();
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (!ai.apiKey) {
+    return res.status(400).json({ error: `${ai.keyName} is missing in server/.env.` });
   }
 
   const dataset = await Dataset.findById(datasetId);
@@ -20,14 +25,18 @@ export async function askQuestion(req, res) {
     return res.status(404).json({ error: "Dataset not found." });
   }
 
+  // Load recent turns BEFORE saving the new question, so follow-ups have context.
+  const recent = await ChatMessage.find({ datasetId }).sort({ createdAt: -1 }).limit(10);
+  const history = buildHistory(recent.reverse());
+
   await ChatMessage.create({ datasetId, role: "user", content: question });
 
-  const chatService = new ChatService(apiKey);
+  const chatService = new ChatService(ai);
   const schemaText = schemaToPromptText(dataset);
 
   let pipeline;
   try {
-    pipeline = await chatService.generatePipeline(question, schemaText);
+    pipeline = await chatService.generatePipeline(question, schemaText, history);
   } catch (err) {
     const errorMsg = `Could not generate a query for that question: ${err.message}`;
     await ChatMessage.create({ datasetId, role: "assistant", content: errorMsg, error: err.message });
