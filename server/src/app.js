@@ -7,7 +7,7 @@ import insightsRoutes from "./routes/insightsRoutes.js";
 export function createApp() {
   const app = express();
 
-    // CLIENT_ORIGIN can hold one or several addresses separated by commas; trailing slashes are ignored.
+  // CLIENT_ORIGIN can hold one or several addresses separated by commas; trailing slashes are ignored.
   const allowedOrigins = (process.env.CLIENT_ORIGIN || "*")
     .split(",")
     .map((s) => s.trim().replace(/\/+$/, ""));
@@ -21,6 +21,12 @@ export function createApp() {
   app.use("/api/datasets", datasetRoutes);
   app.use("/api/chat", chatRoutes);
   app.use("/api/insights", insightsRoutes);
+
+  // Also answer without the /api prefix, so a frontend built with a base URL
+  // that lacks "/api" still works.
+  app.use("/datasets", datasetRoutes);
+  app.use("/chat", chatRoutes);
+  app.use("/insights", insightsRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ error: "Route not found" });
