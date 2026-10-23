@@ -7,7 +7,11 @@ import insightsRoutes from "./routes/insightsRoutes.js";
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
+    // CLIENT_ORIGIN can hold one or several addresses separated by commas; trailing slashes are ignored.
+  const allowedOrigins = (process.env.CLIENT_ORIGIN || "*")
+    .split(",")
+    .map((s) => s.trim().replace(/\/+$/, ""));
+  app.use(cors({ origin: allowedOrigins.includes("*") ? "*" : allowedOrigins }));
   app.use(express.json());
 
   app.get("/api/health", (req, res) => {
