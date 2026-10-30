@@ -13,6 +13,11 @@ const OUT = path.join(ROOT, "docs", "screenshots");
 const CSV = path.join(ROOT, "sample-data", "sample_sales.csv");
 fs.mkdirSync(OUT, { recursive: true });
 
+if (!fs.existsSync(CSV)) {
+  console.error(`Missing ${CSV}\nCreate it first with:  node tools/make-sample.mjs`);
+  process.exit(1);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, name) }).then(() => console.log("saved", name));
 
@@ -46,11 +51,13 @@ const openTab = (page, name) => page.locator(".tabs button", { hasText: name }).
 await wakeBackend();
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
 
 try {
   await page.goto(SITE, { waitUntil: "networkidle" });
   await page.waitForSelector(".upload-box");
+  // Hide the "previous datasets" lists so other people's file names don't appear in the screenshots.
+  await page.addStyleTag({ content: ".recent, .sidebar > div:has(> .recent-list) { display: none !important; }" });
   await sleep(500);
   await shot(page, "upload.png");
 

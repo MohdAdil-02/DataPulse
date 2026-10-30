@@ -27,6 +27,7 @@ Upload a CSV or Excel file, then ask questions about it in plain English. DataPu
 - [API reference](#api-reference)
 - [Safety and privacy](#safety-and-privacy)
 - [Deployment](#deployment)
+- [Development tools](#development-tools)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
 - [Roadmap](#roadmap)
@@ -36,17 +37,18 @@ Upload a CSV or Excel file, then ask questions about it in plain English. DataPu
 
 ## Screenshots
 
-| Upload | Chat with charts |
-|---|---|
-| ![Upload screen](docs/screenshots/upload.png) | ![Chat](docs/screenshots/chat.png) |
-
-| AI summary | Data health report |
-|---|---|
-| ![AI summary](docs/screenshots/summary.png) | ![Health report](docs/screenshots/health.png) |
-
-| Pinned dashboard | Light theme |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Light theme](docs/screenshots/light.png) |
+<p align="center">
+  <img src="docs/screenshots/upload.png" width="49%" alt="Upload screen">
+  <img src="docs/screenshots/chat.png" width="49%" alt="Chat with charts">
+</p>
+<p align="center">
+  <img src="docs/screenshots/summary.png" width="49%" alt="AI summary">
+  <img src="docs/screenshots/health.png" width="49%" alt="Data health report">
+</p>
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" width="49%" alt="Pinned dashboard">
+  <img src="docs/screenshots/light.png" width="49%" alt="Light theme">
+</p>
 
 ---
 
@@ -122,6 +124,7 @@ Each uploaded file is stored in its own MongoDB collection, with a `Dataset` doc
 ```
 DataPulse/
 ├── client/
+│   ├── public/favicon.svg
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── AutoInsights.jsx     # AI Summary tab
@@ -134,7 +137,7 @@ DataPulse/
 │   │   │   └── ResultChart.jsx      # bar, line, area and pie charts
 │   │   ├── services/api.js          # all backend calls
 │   │   ├── App.jsx  App.css  main.jsx  usePins.js  utils.js
-│   └── vercel.json
+│   ├── index.html  vercel.json  .env.example
 ├── server/
 │   ├── src/
 │   │   ├── config/db.js
@@ -150,7 +153,8 @@ DataPulse/
 │   │   ├── utils/fileParser.js      # CSV/Excel parsing and type inference
 │   │   ├── app.js  server.js
 │   └── .env.example
-├── sample-data/sample_sales.csv
+├── sample-data/sample_sales.csv     # demo dataset with a trend and 3 outliers
+├── tools/                           # screenshot and sample-data scripts
 ├── docs/screenshots/
 └── README.md
 ```
@@ -161,7 +165,7 @@ DataPulse/
 
 ### Prerequisites
 
-- Node.js 18 or newer
+- Node.js 20 or newer (22 recommended)
 - A free [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) cluster
 - An API key from [Groq](https://console.groq.com/keys) (free tier) or [xAI](https://console.x.ai)
 
@@ -208,7 +212,7 @@ Upload `sample-data/sample_sales.csv` (90 rows with a rising trend and three pla
 - "What is the total sales by category?"
 - "Now break that down by region"
 - "Show the sales trend by month"
-- Open the **AI Summary**, **Health** and **Insights** tabs.
+- Open the **AI Summary**, **Health** and **Insights** tabs, then pin a few answers and open the **Dashboard**.
 
 ---
 
@@ -223,8 +227,8 @@ Upload `sample-data/sample_sales.csv` (90 rows with a rising trend and three pla
 | `AI_PROVIDER` | No | `groq` (default) or `xai`. |
 | `GROQ_API_KEY` | If using Groq | Key that starts with `gsk_`. |
 | `XAI_API_KEY` | If using xAI | Key that starts with `xai-`. |
-| `AI_MODEL` | No | Overrides the default model. Default for Groq is `openai/gpt-oss-120b`. Provider model lists change often, so check your provider's console if you get a "model not found" error. |
-| `CLIENT_ORIGIN` | Yes in production | Allowed frontend address. Accepts several, separated by commas, for example `http://localhost:5173,https://your-app.vercel.app`. |
+| `AI_MODEL` | No | Overrides the default model. The Groq default is `openai/gpt-oss-120b`. Providers retire models often, so check your provider's console if you get a "model not found" error. |
+| `CLIENT_ORIGIN` | Yes in production | Allowed frontend address. Accepts several, separated by commas, for example `http://localhost:5173,https://your-app.vercel.app`. Trailing slashes are ignored. |
 | `DNS_SERVERS` | No | For networks that block MongoDB SRV lookups, set `8.8.8.8,1.1.1.1`. |
 
 ### `client/.env`
@@ -267,6 +271,7 @@ All routes are also available without the `/api` prefix.
 - **Secrets stay on the server.** API keys are read from server environment variables and are never shipped to the browser.
 - **Temporary files.** Uploaded files are deleted from disk as soon as they are parsed. The data lives only in your MongoDB database.
 - **CORS allow-list.** The API only accepts requests from the origins in `CLIENT_ORIGIN`.
+- **No user separation yet.** There are no accounts, so every dataset in the database is visible to every visitor. Do not upload sensitive data to a public deployment. See [Limitations](#limitations).
 
 ---
 
@@ -294,9 +299,35 @@ In MongoDB Atlas, open **Network Access** and allow `0.0.0.0/0`, because Render'
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
 
-Environment variable: `VITE_API_URL` set to your Render address. Vite reads it at build time, so redeploy after changing it.
+Environment variable: `VITE_API_URL` set to your Render address. Vite reads it at build time, so redeploy after changing it. `client/vercel.json` pins the build settings.
 
 Both platforms redeploy automatically on every push to `main`.
+
+---
+
+## Development tools
+
+The `tools/` folder holds two helper scripts. Run them from the project root.
+
+```bash
+# Create sample-data/sample_sales.csv (90 rows, rising trend, 3 planted outliers)
+node tools/make-sample.mjs
+
+# Capture the README screenshots from the live site (needs Playwright, see below)
+node tools/screenshots.mjs
+```
+
+One-time setup for the screenshot script:
+
+```bash
+cd tools
+npm init -y
+npm install playwright
+npx playwright install chromium
+cd ..
+```
+
+The script wakes the backend, uploads the sample file, asks two questions, pins them, visits every tab, and saves six images to `docs/screenshots/`. If it fails, it saves `_error.png` showing where it stopped.
 
 ---
 
@@ -308,28 +339,31 @@ Both platforms redeploy automatically on every push to `main`.
 | `Invalid scheme, expected connection string to start with "mongodb://"` | `MONGODB_URI` is empty or still a placeholder. Paste your real Atlas string without quotes. |
 | `model_not_found` from the AI provider | The model was retired or isn't available to your account. Set `AI_MODEL` to a current model from your provider's console. |
 | "rate limit reached" | You hit the free-tier limit. Wait a minute, or switch to a lighter model. |
-| CORS error in the browser | `CLIENT_ORIGIN` doesn't match the site's address. Check the `https`, the spelling, and redeploy the backend. |
-| `404` on every request from the live site | `VITE_API_URL` is wrong or the frontend wasn't rebuilt after changing it. |
+| CORS error in the browser | `CLIENT_ORIGIN` doesn't match the site's address. Check `https`, the spelling and quotes, then redeploy the backend. |
+| `404` on every request from the live site | `VITE_API_URL` is wrong, or the frontend wasn't rebuilt after changing it. |
+| Vercel runs `npm run dev` and never finishes | Set the Build Command to `npm run build` and the Output Directory to `dist`, or keep `client/vercel.json`. |
 | First request after a while is very slow | The free backend was asleep. Wait about a minute. |
 | A new `.env` value has no effect | Restart the server. Nodemon does not watch `.env`. |
+| `does not provide an export named ...` in the browser | A client file is out of date. Compare `client/src/services/api.js` with the repo version. |
 
 ---
 
 ## Limitations
 
-- There is **no login**, so anyone with the link can upload data and use your AI quota. Share the link carefully.
+- **There is no login.** Anyone with the link can upload data, see every dataset in the database, and use your AI quota. Do not upload sensitive data to a public deployment.
 - AI-generated queries can be wrong. Use **View query** to check anything important.
 - Health, correlation and insight calculations use up to 50,000 rows per dataset.
 - Forecasting is a simple linear trend. Treat it as a direction indicator, not a precise prediction.
 - Pinned dashboard items are stored in your browser, so they don't follow you to another device.
 - Uploads are limited to 20 MB and the first sheet of an Excel file.
 - AI summaries are cached in server memory and reset when the server restarts.
+- On free hosting the backend sleeps after a period without traffic.
 
 ---
 
 ## Roadmap
 
-- User accounts and per-user datasets (JWT)
+- User accounts and per-user datasets (JWT), so each person only sees their own data
 - Delete datasets and clear chat history
 - Rate limiting and usage quotas
 - Better time-series models such as seasonal forecasting
@@ -341,15 +375,9 @@ Both platforms redeploy automatically on every push to `main`.
 ## Author
 
 **[Your Name]** | [Your Roll No.] | B.Tech, [Your Branch]
-[Lloyd Institute of Engineering & Technology](https://www.lloydinstitute.com/), AKTU
+Lloyd Institute of Engineering & Technology, AKTU
 Guide: [Guide's Name]
 
 GitHub: [@MohdAdil-02](https://github.com/MohdAdil-02)
 
 *Built as a B.Tech major project: "AI-Based Chatbot for Data Exploration and Insights".*
-
----
-
-## License
-
-Released for educational purposes under the MIT License.
