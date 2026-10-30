@@ -1,3 +1,4 @@
+import { validatePipelineSafety, withResultLimit } from "./pipelineValidator.js"; 
 // Both providers speak the OpenAI chat-completions format, so switching is just config.
 const PROVIDERS = {
   groq: { url: "https://api.groq.com/openai/v1/chat/completions", keyName: "GROQ_API_KEY", model: "llama-3.3-70b-versatile", label: "Groq" },
@@ -43,7 +44,7 @@ Rules:
 - questions: exactly 4 follow-up questions a user could ask in plain English. Each must be answerable using only the columns in the schema.
 - Plain language. No markdown. Output only the JSON object.`;
 
-const FORBIDDEN_STAGES = ["$out", "$merge", "$function", "$accumulator", "$where", "$lookup"];
+
 
 export class ChatService {
   constructor(config = getAiConfig()) {
@@ -93,8 +94,8 @@ export class ChatService {
     }
     if (!Array.isArray(pipeline)) throw new Error("Generated pipeline is not a JSON array.");
 
-    validatePipelineSafety(pipeline);
-    return pipeline;
+        validatePipelineSafety(pipeline);
+    return withResultLimit(pipeline);
   }
 
   async explainResult(question, resultPreview) {
@@ -124,16 +125,7 @@ export class ChatService {
   }
 }
 
-export function validatePipelineSafety(pipeline) {
-  for (const stage of pipeline) {
-    const stageNames = Object.keys(stage);
-    for (const name of stageNames) {
-      if (FORBIDDEN_STAGES.includes(name)) {
-        throw new Error(`Generated pipeline uses a disallowed stage: ${name}`);
-      }
-    }
-  }
-}
+export { validatePipelineSafety };
 
 function stripCodeFences(text) {
   return text

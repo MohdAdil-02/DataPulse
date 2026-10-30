@@ -19,7 +19,7 @@ function fileFilter(req, file, cb) {
   if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error(`Unsupported file type: ${ext}. Use CSV or Excel.`));
+        cb(Object.assign(new Error(`Unsupported file type: ${ext || "unknown"}. Use CSV or Excel.`), { status: 400 }));
   }
 }
 

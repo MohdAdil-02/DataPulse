@@ -20,4 +20,5 @@ const datasetSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+datasetSchema.index({ createdAt: -1 });
 export const Dataset = mongoose.model("Dataset", datasetSchema);

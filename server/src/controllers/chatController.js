@@ -1,3 +1,4 @@
+import { isObjectId } from "../middleware/validateId.js";
 import mongoose from "mongoose";
 import { Dataset } from "../models/Dataset.js";
 import { ChatMessage } from "../models/ChatMessage.js";
@@ -6,8 +7,14 @@ import { ChatService, schemaToPromptText, buildHistory, getAiConfig } from "../s
 export async function askQuestion(req, res) {
   const { datasetId, question } = req.body;
 
-  if (!datasetId || !question) {
+    if (!datasetId || !question) {
     return res.status(400).json({ error: "datasetId and question are required." });
+  }
+  if (!isObjectId(String(datasetId))) {
+    return res.status(400).json({ error: "Invalid datasetId." });
+  }
+  if (typeof question !== "string" || question.length > 1000) {
+    return res.status(400).json({ error: "The question must be text of up to 1000 characters." });
   }
 
   let ai;
@@ -47,7 +54,7 @@ export async function askQuestion(req, res) {
   try {
     result = await mongoose.connection.db
       .collection(dataset.collectionName)
-      .aggregate(pipeline)
+            .aggregate(pipeline, { maxTimeMS: 10000 })
       .toArray();
   } catch (err) {
     const errorMsg = `The generated query failed to run: ${err.message}`;
